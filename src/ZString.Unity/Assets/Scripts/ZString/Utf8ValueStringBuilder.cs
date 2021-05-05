@@ -41,7 +41,7 @@ namespace Cysharp.Text
         static byte[] scratchBuffer;
 
         [ThreadStatic]
-        internal static bool scratchBufferUsed; 
+        internal static bool scratchBufferUsed;
 
         byte[] buffer;
         int index;
@@ -103,18 +103,18 @@ namespace Cysharp.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Dispose()
         {
-            if (buffer.Length != ThreadStaticBufferSize)
+            if (buffer != null)
             {
-                if (buffer != null)
+                if (buffer.Length != ThreadStaticBufferSize)
                 {
                     ArrayPool<byte>.Shared.Return(buffer);
                 }
-            }
-            buffer = null;
-            index = 0;
-            if (disposeImmediately)
-            {
-                scratchBufferUsed = false;
+                buffer = null;
+                index = 0;
+                if (disposeImmediately)
+                {
+                    scratchBufferUsed = false;
+                }
             }
         }
 
@@ -199,7 +199,7 @@ namespace Cysharp.Text
                 Advance(repeatCount);
             }
             else
-            { 
+            {
                 var maxLen = UTF8NoBom.GetMaxByteCount(1);
                 Span<byte> utf8Bytes = stackalloc byte[maxLen];
                 ReadOnlySpan<char> chars = stackalloc char[1] { value };
@@ -228,7 +228,16 @@ namespace Cysharp.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(string value)
         {
+#if UNITY_2018_3_OR_NEWER
+            var maxLen = UTF8NoBom.GetMaxByteCount(value.Length);
+            if (buffer.Length - index < maxLen)
+            {
+                Grow(maxLen);
+            }
+            index += UTF8NoBom.GetBytes(value, 0, value.Length, buffer, index);
+#else
             Append(value.AsSpan());
+#endif
         }
 
         /// <summary>Appends the string representation of a specified value followed by the default line terminator to the end of this instance.</summary>
@@ -313,6 +322,9 @@ namespace Cysharp.Text
         /// <summary>Encode the innner utf8 buffer to a System.String.</summary>
         public override string ToString()
         {
+            if (index == 0)
+                return string.Empty;
+
             return UTF8NoBom.GetString(buffer, 0, index);
         }
 
@@ -366,19 +378,66 @@ namespace Cysharp.Text
             throw new NestedStringBuilderCreationException(nameof(Utf16ValueStringBuilder));
         }
 
-        private void AppendFormatInternal<T>(T arg, StandardFormat writeFormat, string argName)
+        private void AppendFormatInternal<T>(T arg, int width, StandardFormat format, string argName)
         {
-            if (!FormatterCache<T>.TryFormatDelegate(arg, buffer.AsSpan(index), out var written, writeFormat))
+            if (width <= 0) // leftJustify
             {
-                Grow(written);
-                if (!FormatterCache<T>.TryFormatDelegate(arg, buffer.AsSpan(index), out written, writeFormat))
+                width *= -1;
+
+                if (!FormatterCache<T>.TryFormatDelegate(arg, buffer.AsSpan(index), out var charsWritten, format))
                 {
-                    ThrowArgumentException(argName);
+                    Grow(charsWritten);
+                    if (!FormatterCache<T>.TryFormatDelegate(arg, buffer.AsSpan(index), out charsWritten, format))
+                    {
+                        ThrowArgumentException(argName);
+                    }
+                }
+
+                index += charsWritten;
+
+                int padding = width - charsWritten;
+                if (width > 0 && padding > 0)
+                {
+                    Append(' ', padding);  // TODO Fill Method is too slow.
                 }
             }
-            index += written;
-        }
+            else // rightJustify
+            {
+                if (typeof(T) == typeof(string))
+                {
+                    var s = Unsafe.As<string>(arg);
+                    int padding = width - s.Length;
+                    if (padding > 0)
+                    {
+                        Append(' ', padding);  // TODO Fill Method is too slow.
+                    }
 
+                    Append(s);
+                }
+                else
+                {
+                    Span<byte> s = stackalloc byte[typeof(T).IsValueType ? Unsafe.SizeOf<T>() * 8 : 1024];
+
+                    if (!FormatterCache<T>.TryFormatDelegate(arg, s, out var charsWritten, format))
+                    {
+                        s = stackalloc byte[s.Length * 2];
+                        if (!FormatterCache<T>.TryFormatDelegate(arg, s, out charsWritten, format))
+                        {
+                            ThrowArgumentException(argName);
+                        }
+                    }
+
+                    int padding = width - charsWritten;
+                    if (padding > 0)
+                    {
+                        Append(' ', padding);  // TODO Fill Method is too slow.
+                    }
+
+                    s.CopyTo(GetSpan(charsWritten));
+                    Advance(charsWritten);
+                }
+            }
+        }
 
         /// <summary>
         /// Register custom formatter

@@ -40,6 +40,7 @@ Related project for loggin using with ZString, [Cysharp/ZLogger](https://github.
 - [Getting Started](#getting-started)
 - [Reference](#reference)
 - [Unity](#unity)
+  - [Install via git URL](#install-via-git-url)
 - [Advanced Tips](#advanced-tips)
 - [License](#license)
 
@@ -94,7 +95,7 @@ async void Example(int x, int y, int z)
     // create Utf8 StringBuilder that build Utf8 directly to avoid encoding
     using var sb2 = ZString.CreateUtf8StringBuilder();
 
-    sb2.Concat("foo:", x, ", bar:", y);
+    sb2.AppendFormat("foo:{0} bar:{1}", x, y);
 
     // directly write to steam or dest to avoid allocation
     await sb2.WriteToAsync(stream);
@@ -182,6 +183,11 @@ Reference
 | `Format` | string | Replaces one or more format items in a string with the string representation of some specified values. |
 | `FormatTo<TBufferWriter>(ref TBufferWriter, T1,..,T16)` | void | Replaces one or more format items in a string with the string representation of some specified values. |
 
+**class ZStringWriter : TextWriter**
+
+A `TextWriter` implementation that is backed with `Utf16ValueStringBuilder`  
+It's important to make sure the writer is always properly disposed.
+
 **static class TextMeshProExtensions**(Unity only)
 
 | method | returns | description |
@@ -204,6 +210,16 @@ Detail of issue in Unity Forum - [[Bug 1214643][2019.3.0f5] System.Runtime.Compi
 Workround:
 - Copy Collections from Library/PackageCache to %Project Folder%/Packages
 - Remove CompilerServices.Unsafe dll from said folder
+
+### Install via git URL
+
+You can add `https://github.com/Cysharp/ZString.git?path=src/ZString.Unity/Assets/Scripts/ZString` to Package Manager.
+
+You can install managed DLL from package mangers's samples Import button.
+
+![image](https://user-images.githubusercontent.com/46207/113681776-56145f00-96fd-11eb-8227-560da9c1a092.png)
+
+If you want to set a target version, ZString uses the *.*.* release tag so you can specify a version like #2.4.0. For example https://github.com/Cysharp/ZString.git?path=src/ZString.Unity/Assets/Scripts/ZString#2.4.0.
 
 Advanced Tips
 ---
